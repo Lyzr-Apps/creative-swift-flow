@@ -5,8 +5,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { AlertCircle, Send, MessageSquare, CheckCircle, AlertTriangle } from 'lucide-react'
+import { AlertCircle, Send, MessageSquare, CheckCircle, AlertTriangle, Ticket, X } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
 interface Message {
   id: string
@@ -20,12 +21,29 @@ interface Message {
   processingTime?: string
 }
 
+interface TicketForm {
+  name: string
+  email: string
+  subject: string
+  message: string
+}
+
 export default function HomePage() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [sessionId] = useState(`session-${Date.now()}`)
+  const [showTicketDialog, setShowTicketDialog] = useState(false)
+  const [ticketLoading, setTicketLoading] = useState(false)
+  const [ticketSuccess, setTicketSuccess] = useState('')
+  const [ticketError, setTicketError] = useState('')
+  const [ticketForm, setTicketForm] = useState<TicketForm>({
+    name: '',
+    email: '',
+    subject: '',
+    message: '',
+  })
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
@@ -117,18 +135,81 @@ export default function HomePage() {
     }
   }
 
+  async function handleTicketSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!ticketForm.name || !ticketForm.email || !ticketForm.subject || !ticketForm.message) {
+      setTicketError('All fields are required')
+      return
+    }
+
+    setTicketLoading(true)
+    setTicketError('')
+    setTicketSuccess('')
+
+    try {
+      const ticketId = `TICKET-${Date.now()}`
+
+      const response = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerName: ticketForm.name,
+          customerEmail: ticketForm.email,
+          subject: ticketForm.subject,
+          customerMessage: ticketForm.message,
+          ticketId: ticketId,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setTicketSuccess(`Ticket created successfully! Your ticket ID: ${ticketId}`)
+        setTicketForm({ name: '', email: '', subject: '', message: '' })
+        setTimeout(() => {
+          setShowTicketDialog(false)
+          setTicketSuccess('')
+        }, 2000)
+      } else {
+        setTicketError(data.error || 'Failed to create ticket')
+      }
+    } catch (err) {
+      setTicketError(
+        err instanceof Error ? err.message : 'An error occurred while creating the ticket'
+      )
+      console.error('Error:', err)
+    } finally {
+      setTicketLoading(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 p-4">
       <div className="max-w-2xl mx-auto h-[calc(100vh-2rem)] flex flex-col">
         {/* Header */}
         <div className="bg-white border-b border-gray-200 rounded-t-lg p-4 shadow-sm">
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <MessageSquare className="w-6 h-6 text-blue-600" />
-            Customer Support
-          </h1>
-          <p className="text-sm text-gray-600 mt-1">
-            Ask questions about our products and services
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                <MessageSquare className="w-6 h-6 text-blue-600" />
+                Customer Support
+              </h1>
+              <p className="text-sm text-gray-600 mt-1">
+                Ask questions about our products and services
+              </p>
+            </div>
+            <Button
+              onClick={() => {
+                setShowTicketDialog(true)
+                setTicketError('')
+                setTicketSuccess('')
+              }}
+              className="bg-green-600 hover:bg-green-700 whitespace-nowrap"
+            >
+              <Ticket className="w-4 h-4 mr-2" />
+              Create Ticket
+            </Button>
+          </div>
         </div>
 
         {/* Error Alert */}
@@ -266,6 +347,131 @@ export default function HomePage() {
             </Button>
           </div>
         </form>
+
+        {/* Ticket Creation Dialog */}
+        <Dialog open={showTicketDialog} onOpenChange={setShowTicketDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Ticket className="w-5 h-5 text-green-600" />
+                Create Support Ticket
+              </DialogTitle>
+              <DialogDescription>
+                Submit a detailed ticket and we'll notify your support team immediately
+              </DialogDescription>
+            </DialogHeader>
+
+            <form onSubmit={handleTicketSubmit} className="space-y-4">
+              {/* Success Message */}
+              {ticketSuccess && (
+                <Alert className="bg-green-50 border-green-200">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                  <AlertDescription className="text-green-800">
+                    {ticketSuccess}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Error Message */}
+              {ticketError && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{ticketError}</AlertDescription>
+                </Alert>
+              )}
+
+              {/* Name Field */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Your Name</label>
+                <Input
+                  type="text"
+                  placeholder="John Doe"
+                  value={ticketForm.name}
+                  onChange={(e) =>
+                    setTicketForm({ ...ticketForm, name: e.target.value })
+                  }
+                  disabled={ticketLoading}
+                  className="w-full"
+                />
+              </div>
+
+              {/* Email Field */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Email Address</label>
+                <Input
+                  type="email"
+                  placeholder="john@example.com"
+                  value={ticketForm.email}
+                  onChange={(e) =>
+                    setTicketForm({ ...ticketForm, email: e.target.value })
+                  }
+                  disabled={ticketLoading}
+                  className="w-full"
+                />
+              </div>
+
+              {/* Subject Field */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">Subject</label>
+                <Input
+                  type="text"
+                  placeholder="Brief description of your issue"
+                  value={ticketForm.subject}
+                  onChange={(e) =>
+                    setTicketForm({ ...ticketForm, subject: e.target.value })
+                  }
+                  disabled={ticketLoading}
+                  className="w-full"
+                />
+              </div>
+
+              {/* Message Field */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">
+                  Detailed Message
+                </label>
+                <textarea
+                  placeholder="Please provide detailed information about your issue..."
+                  value={ticketForm.message}
+                  onChange={(e) =>
+                    setTicketForm({ ...ticketForm, message: e.target.value })
+                  }
+                  disabled={ticketLoading}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  rows={4}
+                />
+              </div>
+
+              {/* Form Actions */}
+              <div className="flex gap-2 justify-end pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowTicketDialog(false)}
+                  disabled={ticketLoading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={ticketLoading}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  {ticketLoading ? (
+                    <div className="animate-spin">
+                      <Send className="w-4 h-4" />
+                    </div>
+                  ) : (
+                    <>
+                      <Ticket className="w-4 h-4 mr-2" />
+                      Submit Ticket
+                    </>
+                  )}
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   )
