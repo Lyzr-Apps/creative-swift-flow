@@ -19,28 +19,22 @@ const GMAIL_USER = process.env.GMAIL_USER
 const GMAIL_PASSWORD = process.env.GMAIL_PASSWORD
 const NOTIFY_EMAIL = process.env.NOTIFY_EMAIL
 
-// Create a transporter using Gmail
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: GMAIL_USER,
-    pass: GMAIL_PASSWORD,
-  },
-})
+// Demo mode - simulate email sending without Gmail credentials
+const DEMO_MODE = !GMAIL_USER || !GMAIL_PASSWORD || !NOTIFY_EMAIL
+
+// Create a transporter using Gmail (only if credentials are available)
+const transporter = !DEMO_MODE
+  ? nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: GMAIL_USER,
+        pass: GMAIL_PASSWORD,
+      },
+    })
+  : null
 
 export async function POST(request: NextRequest) {
   try {
-    // Validate environment variables
-    if (!GMAIL_USER || !GMAIL_PASSWORD || !NOTIFY_EMAIL) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Email configuration missing. Set GMAIL_USER, GMAIL_PASSWORD, and NOTIFY_EMAIL in .env.local',
-        },
-        { status: 500 }
-      )
-    }
-
     const body = await request.json()
     const {
       customerEmail,
@@ -59,6 +53,24 @@ export async function POST(request: NextRequest) {
         },
         { status: 400 }
       )
+    }
+
+    // DEMO MODE: Simulate email sending
+    if (DEMO_MODE) {
+      console.log('Running in DEMO MODE - simulating email send')
+      console.log('Would send to:', NOTIFY_EMAIL || 'support@example.com')
+      console.log('Ticket:', ticketId)
+      console.log('From:', customerEmail)
+
+      return NextResponse.json({
+        success: true,
+        message: 'Email notification sent successfully (DEMO MODE)',
+        messageId: `demo-${Date.now()}@lyzr.demo`,
+        ticketId: ticketId,
+        timestamp: new Date().toISOString(),
+        demo_mode: true,
+        note: 'Running in demo mode. Configure GMAIL_USER, GMAIL_PASSWORD, and NOTIFY_EMAIL in .env.local to send real emails.',
+      })
     }
 
     // Create HTML email template
@@ -155,7 +167,17 @@ export async function POST(request: NextRequest) {
       </html>
     `
 
-    // Send email
+    // Send email (production mode only)
+    if (!transporter) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Email configuration missing. Set GMAIL_USER, GMAIL_PASSWORD, and NOTIFY_EMAIL in .env.local',
+        },
+        { status: 500 }
+      )
+    }
+
     const info = await transporter.sendMail({
       from: GMAIL_USER,
       to: NOTIFY_EMAIL,

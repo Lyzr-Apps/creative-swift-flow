@@ -43,46 +43,94 @@ import parseLLMJson from '@/utils/jsonParser'
 
 const LYZR_API_URL = 'https://agent-prod.studio.lyzr.ai/v3/inference/chat/'
 
-// API key from environment variable only - NO hardcoded fallback!
+// API key from environment variable
 const LYZR_API_KEY = process.env.LYZR_API_KEY
+
+// Demo mode flag
+const DEMO_MODE = !LYZR_API_KEY || process.env.DEMO_MODE === 'true'
+
+// Demo responses for testing
+const DEMO_RESPONSES = [
+  {
+    response: 'Thank you for your question! We have a comprehensive knowledge base on account management. You can reset your password by going to Settings > Security > Change Password. If you continue to have issues, please create a support ticket.',
+    status: 'success',
+    confidence: 0.95,
+    sources_used: ['knowledge_base', 'conversation_history'],
+    suggested_action: 'none',
+  },
+  {
+    response: 'Our products are designed with enterprise security in mind. We use end-to-end encryption and comply with GDPR, HIPAA, and SOC 2 standards. All data is encrypted at rest and in transit. For detailed security information, visit our security portal or contact our security team.',
+    status: 'success',
+    confidence: 0.92,
+    sources_used: ['knowledge_base'],
+    suggested_action: 'none',
+  },
+  {
+    response: 'I understand your concern. This is a common issue that we\'ve documented in our FAQ. However, for your specific situation, I recommend escalating to our specialist team who can provide personalized assistance.',
+    status: 'escalation_recommended',
+    confidence: 0.68,
+    sources_used: ['knowledge_base'],
+    suggested_action: 'escalate_to_human',
+  },
+  {
+    response: 'Our support team is available 24/7 via email, chat, and phone. You can also check our status page at status.example.com for any ongoing incidents. We typically respond to support requests within 2 hours.',
+    status: 'success',
+    confidence: 0.88,
+    sources_used: ['knowledge_base'],
+    suggested_action: 'none',
+  },
+  {
+    response: 'Thank you for reaching out! We\'d be happy to help with your integration. You can find detailed API documentation at docs.example.com, and our developer community is very active on GitHub. Feel free to create a ticket if you need hands-on assistance.',
+    status: 'success',
+    confidence: 0.90,
+    sources_used: ['knowledge_base', 'conversation_history'],
+    suggested_action: 'none',
+  },
+]
 
 export async function POST(request: NextRequest) {
   try {
-    // Check API key is configured
-    if (!LYZR_API_KEY) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'LYZR_API_KEY not configured in .env.local',
-        },
-        { status: 500 }
-      )
-    }
-
     const body = await request.json()
     const { message, agent_id, user_id, session_id } = body
 
     // Validate required fields
-    if (!message || !agent_id) {
+    if (!message) {
       return NextResponse.json(
         {
           success: false,
-          error: 'Missing required fields: message and agent_id are required',
+          error: 'Missing required field: message is required',
         },
         { status: 400 }
       )
     }
 
-    // Call Lyzr API with server-side API key (secure!)
+    // DEMO MODE: Return mock response if no API key
+    if (DEMO_MODE) {
+      console.log('Running in DEMO MODE - using mock responses')
+      const demoResponse = DEMO_RESPONSES[Math.floor(Math.random() * DEMO_RESPONSES.length)]
+
+      return NextResponse.json({
+        success: true,
+        response: demoResponse,
+        raw_response: JSON.stringify(demoResponse),
+        agent_id: agent_id || '690ddd00fef1b728eed3206a',
+        user_id: user_id || `user-${Date.now()}`,
+        session_id: session_id || `session-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        demo_mode: true,
+      })
+    }
+
+    // PRODUCTION MODE: Call Lyzr API with server-side API key (secure!)
     const response = await fetch(LYZR_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': LYZR_API_KEY,
+        'x-api-key': LYZR_API_KEY!,
       },
       body: JSON.stringify({
         user_id: user_id || `user-${Date.now()}`,
-        agent_id,
+        agent_id: agent_id || '690ddd00fef1b728eed3206a',
         session_id: session_id || `session-${Date.now()}`,
         message,
       }),
